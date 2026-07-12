@@ -33,15 +33,14 @@ PRICES_FILE = os.path.join(SCRIPT_DIR, 'previous_prices.json')
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# ===== ИСПРАВЛЕННАЯ ФУНКЦИЯ =====
 def flush_print(*args, **kwargs):
-    """Выводит сообщение и сразу сбрасывает буфер"""
     print(*args, **kwargs)
     sys.stdout.flush()
 
 # ===== СЛОВАРЬ СИНОНИМОВ ОТЕЛЕЙ (сокращённый) =====
 HOTEL_SYNONYMS = {
     "Residence Mahmoud": ["RESIDENCE MAHMOUD"],
+    "Best Beach Hotel": ["Best Beach Hotel"],
 }
 
 def get_canonical_name(original_name):
@@ -141,6 +140,7 @@ def compare_prices(old_prices, new_prices):
 def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=REQUEST_TIMEOUT):
     flush_print(f"\n📡 ЗАГРУЖАЕМ {source_name}...")
     flush_print(f"   URL: {url}")
+    flush_print(f"   Таймаут: {timeout} сек")
     
     all_hotels = {}
     page = 1
@@ -151,6 +151,20 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
     session.mount('https://', HTTPAdapter(max_retries=retries))
     session.mount('http://', HTTPAdapter(max_retries=retries))
 
+    # --- ЗАГОЛОВКИ КАК В БРАУЗЕРЕ ---
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+        'Referer': 'https://on.abstour.by/',
+        'Origin': 'https://on.abstour.by',
+    }
+
     while page <= MAX_PAGES:
         params = params_template.copy()
         params['PageNumber'] = page
@@ -160,16 +174,16 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
 
         try:
             flush_print(f"  Страница {page}...", end="")
-            r = session.get(url, params=params, timeout=timeout, verify=verify_ssl)
+            r = session.get(url, params=params, headers=headers, timeout=timeout, verify=verify_ssl)
             flush_print(f" статус {r.status_code}")
             
             if r.status_code == 200:
                 data = r.json()
                 tours = data.get('Result', [])
                 if not tours:
-                    flush_print("  нет данных")
+                    flush_print("  ❌ нет данных (пустой Result)")
                     break
-                flush_print(f"  {len(tours)} туров")
+                flush_print(f"  ✅ {len(tours)} туров")
                 total_tours += len(tours)
                 for tour in tours:
                     original_name, price, _, _, _ = extract_hotel_info(tour)
@@ -190,9 +204,9 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
                 flush_print(f"  ❌ Ошибка HTTP {r.status_code}")
                 break
         except requests.exceptions.Timeout:
-            flush_print(f"  ⏰ Таймаут на странице {page}. Повторяем...")
-            time.sleep(2)
-            continue
+            flush_print(f"  ⏰ Таймаут на странице {page}.")
+            flush_print(f"  🔄 Пропускаем {source_name} (таймаут)")
+            break
         except Exception as e:
             flush_print(f"  ❌ Ошибка: {e}")
             break
@@ -280,15 +294,15 @@ def get_abs_hotels(date, duration):
         'PageSize': PAGE_SIZE, 'HotelScheme': '', 'TourKey': '', 'TourDuration': '',
         'ShowToursWithoutHotels': -1, 'isFromBasket': 'false', 'isFillSecondaryFilters': 'false',
         'DestinationType': 1, 'DestinationKey': 97, 'AdultCount': ADULTS,
-        'CurrencyName': '$', 'AviaQuota': 5, 'HotelQuota': 7, 'BusTransferQuota': 7,
+        'CurrencyName': '$', 'AviaQuota': 5, 'HotelQuota': 5, 'BusTransferQuota': 7,
         'RailwayTransferQuota': 7, 'TourType': -1, 'CityIds': -1,
         'HotelSignCombination': 'false', 'HotelCombination': 'false',
         'TimeDepartureFrom': '00:00', 'TimeDepartureTo': '23:59',
         'TimeArrivalFrom': '00:00', 'TimeArrivalTo': '23:59',
-        'SearchId': 1, 'wrongLicenseFileUpperTitle': 'Некорректный файл лицензии.',
+        'SearchId': 4, 'wrongLicenseFileUpperTitle': 'Некорректный файл лицензии.',
         'RemoteHotelMode': 0,
     }
-    return fetch_all_pages(url, params, "ABS", verify_ssl=False, timeout=REQUEST_TIMEOUT)
+    return fetch_all_pages(url, params, "ABS", verify_ssl=False, timeout=60)
 
 # ===== ОСНОВНАЯ ФУНКЦИЯ =====
 def main():
@@ -323,13 +337,16 @@ def main():
 
         for name, func in source_functions.items():
             flush_print(f"\n🔄 Загрузка {name}...")
-            result = func(date_str, duration)
-            flush_print(f"   Загружено {len(result)} отелей")
-            for key, data in result.items():
-                hotel_key = get_hotel_key(data['original_name'], date_str, duration)
-                if hotel_key not in current_prices:
-                    current_prices[hotel_key] = {}
-                current_prices[hotel_key][name] = data['price']
+            try:
+                result = func(date_str, duration)
+                flush_print(f"   ✅ Загружено {len(result)} отелей")
+                for key, data in result.items():
+                    hotel_key = get_hotel_key(data['original_name'], date_str, duration)
+                    if hotel_key not in current_prices:
+                        current_prices[hotel_key] = {}
+                    current_prices[hotel_key][name] = data['price']
+            except Exception as e:
+                flush_print(f"   ❌ Ошибка при загрузке {name}: {e}")
 
     flush_print(f"\n📊 Всего отелей: {len(current_prices)}")
 
@@ -337,7 +354,17 @@ def main():
     test_message = f"✅ <b>ТЕСТОВОЕ СООБЩЕНИЕ</b>\n"
     test_message += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
     test_message += f"📊 Найдено отелей: {len(current_prices)}\n"
-    test_message += f"🔄 Скрипт работает в GitHub Actions!"
+    
+    operators_count = {}
+    for hotel_data in current_prices.values():
+        for op in hotel_data.keys():
+            operators_count[op] = operators_count.get(op, 0) + 1
+    
+    test_message += f"\n📊 По источникам:\n"
+    for op, count in sorted(operators_count.items()):
+        test_message += f"   {op}: {count} отелей\n"
+    
+    test_message += f"\n🔄 Скрипт работает в GitHub Actions!"
     
     send_telegram_message(test_message)
     flush_print("✅ ТЕСТ ЗАВЕРШЁН!")
