@@ -19,12 +19,21 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', "ВАШ_CHAT_ID")
 
 ADULTS = 2
 PAGE_SIZE = 20
-MAX_PAGES = 3
+MAX_PAGES = 10
 REQUEST_TIMEOUT = 30
-RETRY_TOTAL = 2
+RETRY_TOTAL = 3
 
+# Все даты и длительности
 DATE_DURATION_LIST = [
     ("13.07.2026", 12),
+    ("24.07.2026", 11),
+    ("03.08.2026", 12),
+    ("14.08.2026", 11),
+    ("24.08.2026", 12),
+    ("04.09.2026", 11),
+    ("14.09.2026", 12),
+    ("25.09.2026", 11),
+    ("05.10.2026", 12),
 ]
 # =====================================
 
@@ -37,10 +46,43 @@ def flush_print(*args, **kwargs):
     print(*args, **kwargs)
     sys.stdout.flush()
 
-# ===== СЛОВАРЬ СИНОНИМОВ ОТЕЛЕЙ (сокращённый) =====
+# ===== ПОЛНЫЙ СЛОВАРЬ СИНОНИМОВ ОТЕЛЕЙ =====
 HOTEL_SYNONYMS = {
+    "Thapsus Beach Resort": ["THAPSUS BEACH RESORT 4*"],
+    "Aziza Thalasso Golf": ["Aziza Beach Thalasso & Golf (Adults Only)", "AZIZA THALASSO GOLF (ADULTS ONLY)"],
+    "Iberostar Selection Kuriat Palace": ["Iberostar Kuriat Palace"],
+    "Tour Khalef Thalasso and Spa (ex.Jaz)": ["Tour Khalef Thalasso & Spa"],
+    "Iberostar Selection Diar El Andalous": ["Iberostar Diar El Andalous"],
+    "Iberostar Selection Kantaoui Bay": ["Iberostar Kantaoui Bay"],
+    "Steigenberger Marhaba Thalasso Hammamet": ["Steigenberger Marhaba Thalasso"],
+    "The Orangers Beach Resort & Bungalows": ["The Orangers Beach Resort & Bungalow"],
+    "Iberostar Averroes": ["Iberostar Waves Averroes"],
+    "El Mouradi Port Kantaoui": ["El Mouradi Port El Kantaoui"],
+    "Novostar Houda Golf & Beach Club": ["Houda Golf Beach & Aquapark"],
+    "Thalassa Sousse Resort & Aqua Park": ["Thalassa Sousse Resort & Aquapark"],
+    "Regency Hotel & Spa": ["Regency Monastir Hotel & Spa"],
+    "Laico Hammamet": ["Blue Marine Hotel & Thalasso (ex. Laico)"],
+    "Tunisia Lodge": ["Shell Beach Hotel & Spa (ex. Tunisia Lodge)"],
+    "Thalassa Mahdia": ["Thalassa Mahdia Aquapark", "Thalassa Mahdia Aqua Park"],
+    "Golden Yasmine Mehari": ["Golden Yasmine Mehari Hammamet Thalasso & Spa", "GOLDEN YASMIN MEHARI HAMMAMET THALASSO & SPA", "Golden Yasmin Mehari  Hammamet", "Golden Yasmine Mehari Hammamet"],
+    "Aylimas Beach & Resort": ["Aylimas Beach & Resort (ex.Palmyra Holiday)", "Aylimas Beach & Resort Monastir"],
+    "Shems Holiday Village & Aquapark": ["Shems Holiday Village"],
+    "TMK L'Atrium Yasmine by Turismark": ["TMK Latrium Yasmine by Turismark", "TMK L'Atrium Yasmine Hammamet"],
+    "Monarque El Fatimi & Aquapark": ["Monarque El Fatimi & Aquapark Mahdia", "MONARQUE EL FATIMI & AQUAPARK"],
+    "Royal Jinene Beach & Spa": ["Royal Jinene"],
+    "Hammamet Hotel & Spa": ["Le Hammamet Hotel & Spa"],
+    "Sahara Beach Aquapark Resort": ["Sahara Beach"],
+    "Club Novostar Sol Azur Beach Congres": ["Club Novostar Sol Azur Beach Congress"],
+    "One Resort Jockey": ["One Resort Jockey (ex. One Resort Monastir)", "One resort Jockey"],
+    "Abou Sofiane Hotel & Aquapark": ["Abou Sofiane Hotel"],
+    "Calimera El Borj": ["Calimera El Borj Mahdia"],
+    "Le Royal Hammamet": ["Le Royal Hotels and Resorts"],
+    "Eden Yasmine Resort & Spa": ["Eden Yasmine Resort Meeting & Spa"],
+    "Medina Solaria & Thalasso": ["Medina Solaria & Thalasso (ex. Iberostar Solaria)"],
+    "Mahdia Beach & Aquapark": ["Mahdia Beach & Aquapark (ex. Lti Mahdia Beach)", "LTI Mahdia Beach & Aquapark"],
+    "La Badira (Adults Only)": ["La Badira", "La Badira - Adult Only", "La Badira (adults only)"],
+    "Royal Azur Thalassa": ["Royal Azur Thalasso Golf"],
     "Residence Mahmoud": ["RESIDENCE MAHMOUD"],
-    "Best Beach Hotel": ["Best Beach Hotel"],
 }
 
 def get_canonical_name(original_name):
@@ -81,7 +123,6 @@ def extract_hotel_info(tour):
 
 def send_telegram_message(message):
     try:
-        flush_print("📨 Отправка в Telegram...")
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         payload = {
             'chat_id': TELEGRAM_CHAT_ID,
@@ -89,7 +130,6 @@ def send_telegram_message(message):
             'parse_mode': 'HTML'
         }
         response = requests.post(url, json=payload, timeout=10)
-        flush_print(f"📨 Ответ Telegram: {response.status_code}")
         return response.status_code == 200
     except Exception as e:
         flush_print(f"❌ Ошибка отправки в Telegram: {e}")
@@ -106,7 +146,7 @@ def save_current_prices(prices):
     try:
         with open(PRICES_FILE, 'w') as f:
             json.dump(prices, f, indent=2)
-        flush_print(f"✅ Цены сохранены в {PRICES_FILE}")
+        flush_print(f"✅ Цены сохранены")
     except Exception as e:
         flush_print(f"❌ Ошибка сохранения цен: {e}")
 
@@ -139,8 +179,6 @@ def compare_prices(old_prices, new_prices):
 
 def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=REQUEST_TIMEOUT):
     flush_print(f"\n📡 ЗАГРУЖАЕМ {source_name}...")
-    flush_print(f"   URL: {url}")
-    flush_print(f"   Таймаут: {timeout} сек")
     
     all_hotels = {}
     page = 1
@@ -151,7 +189,6 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
     session.mount('https://', HTTPAdapter(max_retries=retries))
     session.mount('http://', HTTPAdapter(max_retries=retries))
 
-    # --- ЗАГОЛОВКИ КАК В БРАУЗЕРЕ ---
     headers = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/plain, */*',
@@ -163,6 +200,8 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
         'Sec-Fetch-Site': 'same-origin',
         'Referer': 'https://on.abstour.by/',
         'Origin': 'https://on.abstour.by',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
     }
 
     while page <= MAX_PAGES:
@@ -181,7 +220,7 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
                 data = r.json()
                 tours = data.get('Result', [])
                 if not tours:
-                    flush_print("  ❌ нет данных (пустой Result)")
+                    flush_print("  ❌ нет данных")
                     break
                 flush_print(f"  ✅ {len(tours)} туров")
                 total_tours += len(tours)
@@ -204,8 +243,7 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
                 flush_print(f"  ❌ Ошибка HTTP {r.status_code}")
                 break
         except requests.exceptions.Timeout:
-            flush_print(f"  ⏰ Таймаут на странице {page}.")
-            flush_print(f"  🔄 Пропускаем {source_name} (таймаут)")
+            flush_print(f"  ⏰ Таймаут. Пропускаем {source_name}")
             break
         except Exception as e:
             flush_print(f"  ❌ Ошибка: {e}")
@@ -307,11 +345,9 @@ def get_abs_hotels(date, duration):
 # ===== ОСНОВНАЯ ФУНКЦИЯ =====
 def main():
     flush_print("="*70)
-    flush_print("🏨 МОНИТОРИНГ ЦЕН (ТЕСТОВЫЙ РЕЖИМ)")
+    flush_print("🏨 МОНИТОРИНГ ЦЕН ТУРОВ ТУНИС")
     flush_print("="*70)
     flush_print(f"📅 Время запуска: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    flush_print(f"📁 Файл с ценами: {PRICES_FILE}")
-    flush_print(f"📡 Python version: {sys.version}")
 
     today = datetime.now().date()
     current_prices = {}
@@ -336,38 +372,53 @@ def main():
         }
 
         for name, func in source_functions.items():
-            flush_print(f"\n🔄 Загрузка {name}...")
-            try:
-                result = func(date_str, duration)
-                flush_print(f"   ✅ Загружено {len(result)} отелей")
-                for key, data in result.items():
-                    hotel_key = get_hotel_key(data['original_name'], date_str, duration)
-                    if hotel_key not in current_prices:
-                        current_prices[hotel_key] = {}
-                    current_prices[hotel_key][name] = data['price']
-            except Exception as e:
-                flush_print(f"   ❌ Ошибка при загрузке {name}: {e}")
+            result = func(date_str, duration)
+            for key, data in result.items():
+                hotel_key = get_hotel_key(data['original_name'], date_str, duration)
+                if hotel_key not in current_prices:
+                    current_prices[hotel_key] = {}
+                current_prices[hotel_key][name] = data['price']
 
-    flush_print(f"\n📊 Всего отелей: {len(current_prices)}")
+    # Сравниваем с предыдущими ценами
+    previous_prices = read_previous_prices()
+    changes = compare_prices(previous_prices, current_prices)
 
-    flush_print("\n📨 Отправляем тестовое сообщение...")
-    test_message = f"✅ <b>ТЕСТОВОЕ СООБЩЕНИЕ</b>\n"
-    test_message += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-    test_message += f"📊 Найдено отелей: {len(current_prices)}\n"
-    
-    operators_count = {}
-    for hotel_data in current_prices.values():
-        for op in hotel_data.keys():
-            operators_count[op] = operators_count.get(op, 0) + 1
-    
-    test_message += f"\n📊 По источникам:\n"
-    for op, count in sorted(operators_count.items()):
-        test_message += f"   {op}: {count} отелей\n"
-    
-    test_message += f"\n🔄 Скрипт работает в GitHub Actions!"
-    
-    send_telegram_message(test_message)
-    flush_print("✅ ТЕСТ ЗАВЕРШЁН!")
+    # Сохраняем текущие цены
+    save_current_prices(current_prices)
+
+    # Отправляем уведомление
+    if changes:
+        up = sum(1 for c in changes if '⬆️' in c)
+        down = sum(1 for c in changes if '⬇️' in c)
+        new = sum(1 for c in changes if '🆕' in c)
+        
+        message = f"🔔 <b>ИЗМЕНЕНИЯ ЦЕН</b>\n"
+        message += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        message += f"📊 Всего изменений: {len(changes)}\n"
+        message += f"🆕 Новые отели: {new}\n"
+        message += f"⬆️ Повысилось: {up}\n"
+        message += f"⬇️ Понизилось: {down}\n"
+        
+        if len(changes) > 15:
+            message += f"\n📋 Первые 15 изменений:\n"
+            message += "\n".join(changes[:15])
+            message += f"\n\n... и ещё {len(changes) - 15} изменений."
+        else:
+            message += f"\n📋 Список изменений:\n"
+            message += "\n".join(changes)
+        
+        send_telegram_message(message)
+        flush_print(f"📨 Отправлено уведомление ({len(changes)} изменений)")
+    else:
+        message = f"✅ <b>ЦЕНЫ НЕ ИЗМЕНИЛИСЬ</b>\n"
+        message += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        message += f"📊 Всего отелей в мониторинге: {len(current_prices)}\n"
+        message += f"🔄 Следующая проверка через 30 минут"
+        
+        send_telegram_message(message)
+        flush_print("📨 Отправлено уведомление (изменений нет)")
+
+    flush_print("\n✅ МОНИТОРИНГ ЗАВЕРШЁН")
 
 if __name__ == "__main__":
     main()
