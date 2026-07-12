@@ -19,11 +19,10 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', "ВАШ_CHAT_ID")
 
 ADULTS = 2
 PAGE_SIZE = 20
-MAX_PAGES = 3  # ВРЕМЕННО — только 3 страницы для теста
-REQUEST_TIMEOUT = 30  # Уменьшил таймаут для теста
+MAX_PAGES = 3
+REQUEST_TIMEOUT = 30
 RETRY_TOTAL = 2
 
-# ВРЕМЕННО — только одна дата для теста
 DATE_DURATION_LIST = [
     ("13.07.2026", 12),
 ]
@@ -34,11 +33,13 @@ PRICES_FILE = os.path.join(SCRIPT_DIR, 'previous_prices.json')
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-def flush_print(msg):
-    print(msg)
+# ===== ИСПРАВЛЕННАЯ ФУНКЦИЯ =====
+def flush_print(*args, **kwargs):
+    """Выводит сообщение и сразу сбрасывает буфер"""
+    print(*args, **kwargs)
     sys.stdout.flush()
 
-# ===== СЛОВАРЬ СИНОНИМОВ ОТЕЛЕЙ (сокращённый для теста) =====
+# ===== СЛОВАРЬ СИНОНИМОВ ОТЕЛЕЙ (сокращённый) =====
 HOTEL_SYNONYMS = {
     "Residence Mahmoud": ["RESIDENCE MAHMOUD"],
 }
@@ -158,9 +159,9 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
             params['SearchId'] = page
 
         try:
-            flush_print(f"  Страница {page}...", end=" ")
+            flush_print(f"  Страница {page}...", end="")
             r = session.get(url, params=params, timeout=timeout, verify=verify_ssl)
-            flush_print(f"статус {r.status_code}")
+            flush_print(f" статус {r.status_code}")
             
             if r.status_code == 200:
                 data = r.json()
@@ -332,7 +333,6 @@ def main():
 
     flush_print(f"\n📊 Всего отелей: {len(current_prices)}")
 
-    # Тестовая отправка
     flush_print("\n📨 Отправляем тестовое сообщение...")
     test_message = f"✅ <b>ТЕСТОВОЕ СООБЩЕНИЕ</b>\n"
     test_message += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
