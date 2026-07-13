@@ -177,14 +177,17 @@ def compare_prices(old_prices, new_prices):
                 changes.append(f"{icon} {operator}: {hotel_name} ({date_str}, {duration}д): ${old_price:.0f} → ${new_price:.0f}")
     return changes
 
-def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=REQUEST_TIMEOUT):
+def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=REQUEST_TIMEOUT, session=None):
+    
     flush_print(f"\n📡 ЗАГРУЖАЕМ {source_name}...")
     
     all_hotels = {}
     page = 1
     total_tours = 0
 
-    session = requests.Session()
+    if session is None:
+        session = requests.Session()
+    
     retries = Retry(total=RETRY_TOTAL, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
     session.mount('https://', HTTPAdapter(max_retries=retries))
     session.mount('http://', HTTPAdapter(max_retries=retries))
@@ -238,15 +241,16 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
                     flush_print("  📄 последняя страница")
                     break
                 page += 1
-                time.sleep(0.3)
+                time.sleep(0.5)
             else:
                 flush_print(f"  ❌ Ошибка HTTP {r.status_code}")
                 if r.status_code == 403 or r.status_code == 404:
                     flush_print(f"  📄 Ответ: {r.text[:200]}")
                 break
         except requests.exceptions.Timeout:
-            flush_print(f"  ⏰ Таймаут. Пропускаем {source_name}")
-            break
+            flush_print(f"  ⏰ Таймаут. Пробуем ещё раз...")
+            time.sleep(2)
+            continue
         except Exception as e:
             flush_print(f"  ❌ Ошибка: {e}")
             break
