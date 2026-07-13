@@ -241,6 +241,8 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
                 time.sleep(0.3)
             else:
                 flush_print(f"  ❌ Ошибка HTTP {r.status_code}")
+                if r.status_code == 403 or r.status_code == 404:
+                    flush_print(f"  📄 Ответ: {r.text[:200]}")
                 break
         except requests.exceptions.Timeout:
             flush_print(f"  ⏰ Таймаут. Пропускаем {source_name}")
@@ -340,7 +342,14 @@ def get_abs_hotels(date, duration):
         'SearchId': 4, 'wrongLicenseFileUpperTitle': 'Некорректный файл лицензии.',
         'RemoteHotelMode': 0,
     }
-    return fetch_all_pages(url, params, "ABS", verify_ssl=False, timeout=60)
+
+    session = requests.Session()
+    session.cookies.set('accept_cookies', 'true')
+    session.cookies.set('language', 'ru')
+    
+    time.sleep(1)
+
+    return fetch_all_pages(url, params, "ABS", verify_ssl=False, timeout=120, session=session)
 
 # ===== ОСНОВНАЯ ФУНКЦИЯ =====
 def main():
