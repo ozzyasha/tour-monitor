@@ -178,12 +178,13 @@ def compare_prices(old_prices, new_prices):
     return changes
 
 def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=REQUEST_TIMEOUT, session=None):
-    
     flush_print(f"\n📡 ЗАГРУЖАЕМ {source_name}...")
     
     all_hotels = {}
     page = 1
     total_tours = 0
+    timeout_count = 0           # счётчик таймаутов на одной странице
+    MAX_TIMEOUTS_PER_PAGE = 1   # максимум 1 повтор при таймауте
 
     if session is None:
         session = requests.Session()
@@ -193,14 +194,10 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
     session.mount('http://', HTTPAdapter(max_retries=retries))
 
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin',
         'Referer': 'https://on.abstour.by/',
         'Origin': 'https://on.abstour.by',
         'Cache-Control': 'no-cache',
@@ -217,6 +214,7 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
         try:
             flush_print(f"  Страница {page}...", end="")
             r = session.get(url, params=params, headers=headers, timeout=timeout, verify=verify_ssl)
+            timeout_count = 0   # сброс счётчика при успешном ответе
             flush_print(f" статус {r.status_code}")
             
             if r.status_code == 200:
@@ -244,13 +242,16 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
                 time.sleep(0.5)
             else:
                 flush_print(f"  ❌ Ошибка HTTP {r.status_code}")
-                if r.status_code == 403 or r.status_code == 404:
-                    flush_print(f"  📄 Ответ: {r.text[:200]}")
                 break
         except requests.exceptions.Timeout:
-            flush_print(f"  ⏰ Таймаут. Пробуем ещё раз...")
-            time.sleep(2)
-            continue
+            timeout_count += 1
+            if timeout_count <= MAX_TIMEOUTS_PER_PAGE:
+                flush_print(f"  ⏰ Таймаут (попытка {timeout_count}/{MAX_TIMEOUTS_PER_PAGE})...")
+                time.sleep(2)
+                continue
+            else:
+                flush_print(f"  ⏰ Таймаут после {timeout_count} попыток. Пропускаем {source_name}.")
+                break
         except Exception as e:
             flush_print(f"  ❌ Ошибка: {e}")
             break
@@ -351,9 +352,7 @@ def get_abs_hotels(date, duration):
     session.cookies.set('accept_cookies', 'true')
     session.cookies.set('language', 'ru')
     
-    time.sleep(1)
-
-    return fetch_all_pages(url, params, "ABS", verify_ssl=False, timeout=120, session=session)
+    return fetch_all_pages(url, params, "ABS", verify_ssl=False, timeout=45, session=session)
 
 # ===== ОСНОВНАЯ ФУНКЦИЯ =====
 def main():
