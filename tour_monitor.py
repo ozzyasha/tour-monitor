@@ -16,6 +16,7 @@ from urllib3.util.retry import Retry
 # ===== НАСТРОЙКИ (через переменные окружения) =====
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', "ВАШ_ТОКЕН")
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', "ВАШ_CHAT_ID")
+proxy = os.environ.get('PROXY', "SOME_PROXY")
 
 ADULTS = 2
 PAGE_SIZE = 20
@@ -204,6 +205,11 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
         'Pragma': 'no-cache',
     }
 
+    proxies = {
+        "http": proxy,
+        "https": proxy,
+    }
+
     while page <= MAX_PAGES:
         params = params_template.copy()
         params['PageNumber'] = page
@@ -213,7 +219,7 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
 
         try:
             flush_print(f"  Страница {page}...", end="")
-            r = session.get(url, params=params, headers=headers, timeout=timeout, verify=verify_ssl)
+            r = session.get(url, proxies=proxies, params=params, headers=headers, timeout=timeout, verify=verify_ssl)
             timeout_count = 0   # сброс счётчика при успешном ответе
             flush_print(f" статус {r.status_code}")
             
