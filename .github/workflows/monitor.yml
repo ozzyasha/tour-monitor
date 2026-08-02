@@ -9,40 +9,27 @@ jobs:
   monitor:
     runs-on: ubuntu-latest
     
-    steps:
-    - name: Checkout code
+steps:
+    - name: Checkout repository
       uses: actions/checkout@v4
-    
-    - name: Download previous prices
-      uses: actions/download-artifact@v4
-      env:
-        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      with:
-        name: previous_prices
-        path: .
-      continue-on-error: true
-    
-    - name: Setup Python
+      
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
-    
+        python-version: '3.10'
+        
     - name: Install dependencies
       run: |
         pip install requests pandas openpyxl urllib3
-    
-    - name: Run monitor script
+        pip install requests pandas gspread oauth2client
+        
+    - name: Run monitor
       env:
         TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        PROXY_IP: ${{ secrets.PROXY_IP }}
+        PROXY_PORT: ${{ secrets.PROXY_PORT }}
+        GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+        SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
       run: |
         python tour_monitor.py
-    
-    - name: Upload previous prices
-      uses: actions/upload-artifact@v4
-      env:
-        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      with:
-        name: previous_prices
-        path: previous_prices.json
-        retention-days: 1
