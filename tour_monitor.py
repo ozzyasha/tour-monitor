@@ -12,10 +12,17 @@ import sys
 from datetime import datetime
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from collections import defaultdict
 
 # ===== НАСТРОЙКИ (через переменные окружения) =====
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', "ВАШ_ТОКЕН")
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', "ВАШ_CHAT_ID")
+
+# Google Sheets настройки
+GOOGLE_CREDENTIALS_JSON = os.environ.get('GOOGLE_SHEETS_CREDENTIALS', "")
+SPREADSHEET_ID = os.environ.get('SPREADSHEET_ID', "")
 
 ADULTS = 2
 PAGE_SIZE = 20
@@ -25,9 +32,6 @@ RETRY_TOTAL = 3
 
 # Все даты и длительности
 DATE_DURATION_LIST = [
-    ("13.07.2026", 12),
-    ("24.07.2026", 11),
-    ("03.08.2026", 12),
     ("14.08.2026", 11),
     ("24.08.2026", 12),
     ("04.09.2026", 11),
@@ -85,6 +89,94 @@ HOTEL_SYNONYMS = {
     "Residence Mahmoud": ["RESIDENCE MAHMOUD"],
 }
 
+def get_google_sheet():
+    try:
+        # Парсим JSON из переменной окружения
+        creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
+        
+        # Настраиваем доступ
+        scope = ["https://spreadsheets.google.com/feeds", 
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"]
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+        
+        # Открываем таблицу
+        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+        
+        # Если лист пустой, создаем заголовки
+        if not sheet.get_all_records():
+            headers = ['Hotel', 'Date', 'Duration', 'Operator', 'Price', 'Updated']
+            sheet.append_row(headers)
+        
+        return sheet
+    except Exception as e:
+        flush_print(f"❌ Ошибка подключения к Google Sheets: {e}")
+        return None
+
+def read_previous_prices_from_sheet(sheet):
+    """Читаем прошлые цены из Google Sheets"""
+    try:
+        if not sheet:
+            return {}
+        
+        records = sheet.get_all_records()
+        previous_prices = {}
+        
+        for row in records:
+            key = f"{row['Hotel']}_{row['Date']}_{row['Duration']}"
+            if key not in previous_prices:
+                previous_prices[key] = {}
+            previous_prices[key][row['Operator']] = float(row['Price'])
+        
+        flush_print(f"📊 Загружено {len(previous_prices)} отелей из Google Sheets")
+        return previous_prices
+        
+    except Exception as e:
+        flush_print(f"❌ Ошибка чтения из Google Sheets: {e}")
+        return {}
+
+def save_current_prices_to_sheet(sheet, current_prices):
+    """Сохраняем текущие цены в Google Sheets"""
+    try:
+        if not sheet:
+            return False
+        
+        # Очищаем лист (оставляем только заголовки)
+        sheet.clear()
+        sheet.append_row(['Hotel', 'Date', 'Duration', 'Operator', 'Price', 'Updated'])
+        
+        # Добавляем данные
+        rows = []
+        for hotel_key, operators in current_prices.items():
+            parts = hotel_key.rsplit('_', 2)
+            if len(parts) == 3:
+                hotel, date, duration = parts
+            else:
+                continue
+                
+            for operator, price in operators.items():
+                rows.append([
+                    hotel,
+                    date,
+                    duration,
+                    operator,
+                    price,
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                ])
+        
+        # Добавляем все строки за раз (быстрее)
+        if rows:
+            sheet.append_rows(rows, value_input_option='USER_ENTERED')
+
+        flush_print(f"✅ Сохранено {len(rows)} записей в Google Sheets")
+        return True
+        
+    except Exception as e:
+        flush_print(f"❌ Ошибка сохранения в Google Sheets: {e}")
+        return False
+
 def get_canonical_name(original_name):
     if not original_name:
         return ""
@@ -135,21 +227,6 @@ def send_telegram_message(message):
         flush_print(f"❌ Ошибка отправки в Telegram: {e}")
         return False
 
-def read_previous_prices():
-    try:
-        with open(PRICES_FILE, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-def save_current_prices(prices):
-    try:
-        with open(PRICES_FILE, 'w') as f:
-            json.dump(prices, f, indent=2)
-        flush_print(f"✅ Цены сохранены")
-    except Exception as e:
-        flush_print(f"❌ Ошибка сохранения цен: {e}")
-
 def get_hotel_key(hotel_name, date, duration):
     return f"{hotel_name}_{date}_{duration}"
 
@@ -159,13 +236,9 @@ def compare_prices(old_prices, new_prices):
         old_data = old_prices.get(key, {})
         parts = key.rsplit('_', 2)
         if len(parts) == 3:
-            hotel_name = parts[0]
-            date_str = parts[1]
-            duration = parts[2]
+            hotel_name, date_str, duration = parts
         else:
-            hotel_name = key
-            date_str = "неизвестно"
-            duration = "?"
+            hotel_name, date_str, duration = key, "неизвестно", "?"
         
         for operator, new_price in new_data.items():
             old_price = old_data.get(operator)
@@ -368,13 +441,20 @@ def get_abs_hotels(date, duration):
 # ===== ОСНОВНАЯ ФУНКЦИЯ =====
 def main():
     flush_print("="*70)
-    flush_print("🏨 МОНИТОРИНГ ЦЕН ТУРОВ ТУНИС")
+    flush_print("🏨 МОНИТОРИНГ ЦЕН ТУРОВ ТУНИС (Google Sheets)")
     flush_print("="*70)
     flush_print(f"📅 Время запуска: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
+    
+    # Подключаемся к Google Sheets
+    sheet = get_google_sheet()
+    if not sheet:
+        flush_print("❌ Не удалось подключиться к Google Sheets. Работаем без истории.")
+        sheet = None
+    
+    # Собираем текущие цены
     today = datetime.now().date()
     current_prices = {}
-
+    
     for date_str, duration in DATE_DURATION_LIST:
         try:
             date_obj = datetime.strptime(date_str, "%d.%m.%Y").date()
@@ -382,10 +462,10 @@ def main():
             continue
         if date_obj < today:
             continue
-
+            
         flush_print(f"\n📅 Обработка даты: {date_str}, {duration} дней")
         flush_print("-" * 40)
-
+        
         source_functions = {
             'Intercity': get_intercity_hotels,
             'Rosting': get_rosting_hotels,
@@ -393,7 +473,7 @@ def main():
             'Voyage': get_voyage_hotels,
             'ABS': get_abs_hotels,
         }
-
+        
         for name, func in source_functions.items():
             result = func(date_str, duration)
             for key, data in result.items():
@@ -401,14 +481,20 @@ def main():
                 if hotel_key not in current_prices:
                     current_prices[hotel_key] = {}
                 current_prices[hotel_key][name] = data['price']
-
-    # Сравниваем с предыдущими ценами
-    previous_prices = read_previous_prices()
+    
+    # Читаем прошлые цены
+    if sheet:
+        previous_prices = read_previous_prices_from_sheet(sheet)
+    else:
+        previous_prices = {}
+    
+    # Сравниваем
     changes = compare_prices(previous_prices, current_prices)
-
-    # Сохраняем текущие цены
-    save_current_prices(current_prices)
-
+    
+    # Сохраняем в Google Sheets (всегда, не только если есть изменения)
+    if sheet:
+        save_current_prices_to_sheet(sheet, current_prices)
+    
     # Отправляем уведомление
     if changes:
         up = sum(1 for c in changes if '⬆️' in c)
@@ -435,12 +521,11 @@ def main():
     else:
         message = f"✅ <b>ЦЕНЫ НЕ ИЗМЕНИЛИСЬ</b>\n"
         message += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        message += f"📊 Всего отелей в мониторинге: {len(current_prices)}\n"
-        message += f"🔄 Следующая проверка через 30 минут"
+        message += f"📊 Всего отелей в мониторинге: {len(current_prices)}"
         
         send_telegram_message(message)
         flush_print("📨 Отправлено уведомление (изменений нет)")
-
+    
     flush_print("\n✅ МОНИТОРИНГ ЗАВЕРШЁН")
 
 if __name__ == "__main__":
