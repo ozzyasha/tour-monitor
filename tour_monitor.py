@@ -288,6 +288,8 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
     else:
         proxies = None
 
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
     while page <= MAX_PAGES:
         params = params_template.copy()
         params['PageNumber'] = page
@@ -454,6 +456,7 @@ def get_abs_hotels(date, duration):
     session.cookies.set('accept_cookies', 'true')
     session.cookies.set('language', 'ru')
     session.headers.update({'Upgrade-Insecure-Requests': '1'})
+    session.verify = False
     
     return fetch_all_pages(url, params, "ABS", verify_ssl=False, timeout=45, session=session)
 
