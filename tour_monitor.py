@@ -419,22 +419,41 @@ def get_voyage_hotels(date, duration):
 def get_abs_hotels(date, duration):
     url = "https://on.abstour.by:2340/TourSearchOwin/Tour"
     params = {
-        'DepartureCityKeys': 448, 'Dates': date, 'Durations': duration,
-        'PageSize': PAGE_SIZE, 'HotelScheme': '', 'TourKey': '', 'TourDuration': '',
-        'ShowToursWithoutHotels': -1, 'isFromBasket': 'false', 'isFillSecondaryFilters': 'false',
-        'DestinationType': 1, 'DestinationKey': 97, 'AdultCount': ADULTS,
-        'CurrencyName': '$', 'AviaQuota': 5, 'HotelQuota': 5, 'BusTransferQuota': 7,
-        'RailwayTransferQuota': 7, 'TourType': -1, 'CityIds': -1,
-        'HotelSignCombination': 'false', 'HotelCombination': 'false',
-        'TimeDepartureFrom': '00:00', 'TimeDepartureTo': '23:59',
-        'TimeArrivalFrom': '00:00', 'TimeArrivalTo': '23:59',
-        'SearchId': 4, 'wrongLicenseFileUpperTitle': 'Некорректный файл лицензии.',
+        'DepartureCityKeys': 448, 
+        'Dates': date, 
+        'Durations': duration,
+        'PageSize': PAGE_SIZE, 
+        'HotelScheme': '', 
+        'TourKey': '', 
+        'TourDuration': '',
+        'ShowToursWithoutHotels': -1, 
+        'isFromBasket': 'false', 
+        'isFillSecondaryFilters': 'false',
+        'DestinationType': 1, 
+        'DestinationKey': 97, 
+        'AdultCount': ADULTS,
+        'CurrencyName': '$', 
+        'AviaQuota': 5, 
+        'HotelQuota': 5, 
+        'BusTransferQuota': 7,
+        'RailwayTransferQuota': 7, 
+        'TourType': -1, 
+        'CityIds': -1,
+        'HotelSignCombination': 'false', 
+        'HotelCombination': 'false',
+        'TimeDepartureFrom': '00:00', 
+        'TimeDepartureTo': '23:59',
+        'TimeArrivalFrom': '00:00', 
+        'TimeArrivalTo': '23:59',
+        'SearchId': 4, 
+        'wrongLicenseFileUpperTitle': 'Некорректный файл лицензии.',
         'RemoteHotelMode': 0,
     }
 
     session = requests.Session()
     session.cookies.set('accept_cookies', 'true')
     session.cookies.set('language', 'ru')
+    session.headers.update({'Upgrade-Insecure-Requests': '1'})
     
     return fetch_all_pages(url, params, "ABS", verify_ssl=False, timeout=45, session=session)
 
