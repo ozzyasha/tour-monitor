@@ -250,7 +250,7 @@ def compare_prices(old_prices, new_prices):
                 changes.append(f"{icon} {operator}: {hotel_name} ({date_str}, {duration}д): ${old_price:.0f} → ${new_price:.0f}")
     return changes
 
-def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=REQUEST_TIMEOUT, session=None):
+def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=REQUEST_TIMEOUT, session=None, proxy_url=None):
     flush_print(f"\n📡 ЗАГРУЖАЕМ {source_name}...")
     
     all_hotels = {}
@@ -266,6 +266,14 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
     session.mount('https://', HTTPAdapter(max_retries=retries))
     session.mount('http://', HTTPAdapter(max_retries=retries))
 
+    proxies = None
+    if proxy_url:
+        proxies = {
+            "http": proxy_url,
+            "https": proxy_url,
+        }
+        flush_print(f"  🔒 Используем прокси: {proxy_url}")
+
     headers = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         'Accept': 'application/json, text/plain, */*',
@@ -276,17 +284,6 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache',
     }
-    proxy_ip = os.environ.get('PROXY_IP', "")
-    proxy_port = os.environ.get('PROXY_PORT', "")
-
-    if proxy_ip and proxy_port:
-        proxy_url = f"http://{proxy_ip}:{proxy_port}"
-        proxies = {
-            "http": proxy_url,
-            "https": proxy_url,
-        }
-    else:
-        proxies = None
 
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -299,7 +296,14 @@ def fetch_all_pages(url, params_template, source_name, verify_ssl=True, timeout=
 
         try:
             flush_print(f"  Страница {page}...", end="")
-            r = session.get(url, proxies=proxies, params=params, headers=headers, timeout=timeout, verify=verify_ssl)
+            r = session.get(
+                url, 
+                proxies=proxies, 
+                params=params, 
+                headers=headers, 
+                timeout=timeout, 
+                verify=verify_ssl
+            )
             timeout_count = 0   # сброс счётчика при успешном ответе
             flush_print(f" статус {r.status_code}")
             
@@ -361,7 +365,7 @@ def get_intercity_hotels(date, duration):
         'SearchId': 3, 'wrongLicenseFileUpperTitle': 'Некорректный файл лицензии.',
         'RemoteHotelMode': 0,
     }
-    return fetch_all_pages(url, params, "Intercity", verify_ssl=False, timeout=90)
+    return fetch_all_pages(url, params, "Intercity", verify_ssl=False, timeout=REQUEST_TIMEOUT, proxy_url=None)
 
 # ----- 2. Rosting -----
 def get_rosting_hotels(date, duration):
@@ -379,7 +383,7 @@ def get_rosting_hotels(date, duration):
         'SearchId': 1, 'wrongLicenseFileUpperTitle': 'Некорректный файл лицензии.',
         'RemoteHotelMode': 0,
     }
-    return fetch_all_pages(url, params, "Rosting", timeout=REQUEST_TIMEOUT)
+    return fetch_all_pages(url, params, "Rosting", timeout=REQUEST_TIMEOUT, proxy_url=None)
 
 # ----- 3. T-V -----
 def get_tv_hotels(date, duration):
@@ -397,7 +401,7 @@ def get_tv_hotels(date, duration):
         'SearchId': 1, 'wrongLicenseFileUpperTitle': 'Некорректный файл лицензии.',
         'RemoteHotelMode': 0,
     }
-    return fetch_all_pages(url, params, "T-V", timeout=REQUEST_TIMEOUT)
+    return fetch_all_pages(url, params, "T-V", timeout=REQUEST_TIMEOUT, proxy_url=None)
 
 # ----- 4. Voyage -----
 def get_voyage_hotels(date, duration):
@@ -415,7 +419,7 @@ def get_voyage_hotels(date, duration):
         'SearchId': 1, 'wrongLicenseFileUpperTitle': 'Некорректный файл лицензии.',
         'RemoteHotelMode': 0,
     }
-    return fetch_all_pages(url, params, "Voyage", verify_ssl=False, timeout=REQUEST_TIMEOUT)
+    return fetch_all_pages(url, params, "Voyage", verify_ssl=False, timeout=REQUEST_TIMEOUT, proxy_url=None)
 
 # ----- 5. ABS -----
 def get_abs_hotels(date, duration):
@@ -452,13 +456,20 @@ def get_abs_hotels(date, duration):
         'RemoteHotelMode': 0,
     }
 
+    proxy_ip = os.environ.get('PROXY_IP', "")
+    proxy_port = os.environ.get('PROXY_PORT', "")
+    proxy_url = None
+    if proxy_ip and proxy_port:
+        proxy_url = f"http://{proxy_ip}:{proxy_port}"
+        flush_print(f"🔑 Прокси для ABS: {proxy_url}")
+
     session = requests.Session()
     session.cookies.set('accept_cookies', 'true')
     session.cookies.set('language', 'ru')
     session.headers.update({'Upgrade-Insecure-Requests': '1'})
     session.verify = False
     
-    return fetch_all_pages(url, params, "ABS", verify_ssl=False, timeout=45, session=session)
+    return fetch_all_pages(url, params, "ABS", verify_ssl=False, timeout=120, session=session, proxy_url=proxy_url)
 
 # ===== ОСНОВНАЯ ФУНКЦИЯ =====
 def main():
