@@ -1,11 +1,11 @@
 name: Tour Price Monitor
 
-on:
-  schedule:
-    - cron: '*/30 * * * *'
-  workflow_dispatch:
+#on:
+#  schedule:
+#    - cron: '*/30 * * * *'
+#  workflow_dispatch:
 
-jobs:
+#jobs:
   monitor:
     runs-on: ubuntu-latest
     
